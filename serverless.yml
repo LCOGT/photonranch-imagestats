@@ -1,0 +1,69 @@
+# serverless.yml
+org: photonadmin
+app: photonranch
+
+service: photonranch-imagestats
+
+provider:
+  name: aws
+  runtime: python3.7
+
+
+functions:
+  numpy:
+    handler: numpy-basic.main
+    onError: arn:aws:sns:us-east-1:306389350997:sls-dlq
+  astro: 
+    handler: astro-basic.hello
+    onError: arn:aws:sns:us-east-1:306389350997:sls-dlq
+  getRegionStats:
+    handler: regions.getRegionStats
+    timeout: 30
+    memorySize: 3008 
+    events:
+      - http:
+          path: regionstats
+          method: post
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - Access-Control-Allow-Origin
+              - Access-Control-Allow-Credentials
+  getStarProfiles:
+    handler: regions.getStarProfiles
+    timeout: 30
+    memorySize: 3008
+    events:
+      - http:
+          path: starprofiles
+          method: post
+          cors:
+            origin: '*'
+            headers:
+              - Content-Type
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+              - Access-Control-Allow-Origin
+              - Access-Control-Allow-Credentials
+
+plugins: 
+  - serverless-python-requirements
+
+custom: 
+  pythonRequirements:
+    dockerizePip: non-linux
+    zip: true
+    slim: true
+
+package: 
+  exclude:
+    - venv/**
