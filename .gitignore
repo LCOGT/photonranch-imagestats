@@ -19,6 +19,10 @@ var/
 # Serverless directories
 .serverless
 
+# The zipped pip dependencies used by the aws lambda environment.
+.requirements.zip 
+
+
 # other
 venv/
 .vscode/
