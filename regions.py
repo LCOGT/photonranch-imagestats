@@ -84,9 +84,9 @@ def _get_fits(site, base_filename, EX01orEX13):
         print("Fits file not cached; downloading file.")
 
         # Get the url for the file
-        api_url = f"https://api.photonranch.org/fits{EX01orEX13}_url/{site}/{base_filename}"
+        api_url = f"https://api.photonranch.org/api/fits{EX01orEX13}_url/{base_filename}"
         print(f"API url: {api_url}")
-        file_url = requests.get(api_url).json()
+        file_url = requests.get(api_url).text
         print(f"File url: {file_url}")
 
         # Load the file from the url
@@ -197,10 +197,13 @@ def sepAnalysis(data, event, showPlots=False):
         profile = _get_star_profile(obj, data_sub)
         
         # Only keep the objects with a good gaussian fit.
-        if profile['r2'] > 0.99:
-            profiles.append(profile) 
-            if showPlots:
-                _plot_profile(profile)
+        #if profile['r2'] > 0.99:
+        #    profiles.append(profile) 
+        #    if showPlots and idx < 10:
+        #        _plot_profile(profile)
+        profiles.append(profile)
+        if idx < 10 and showPlots:
+            _plot_profile(profile)
         
     if len(profiles) == 0:
         return {
@@ -213,14 +216,26 @@ def sepAnalysis(data, event, showPlots=False):
 
     brightest_star = profiles[0]
     print("brightest star: ", _make_json_ready_profile(brightest_star,fits_header))
+    #_plot_profile(brightest_star)
     
     # The list of profiles is already sorted by flux, big to small.
     median_star = profiles[int(len(profiles)/2)]
     print("median star: ", _make_json_ready_profile(median_star, fits_header))
+    #_plot_profile(median_star)
+    
+    saturate_max = fits_header.get('saturate')
+    for i in range(len(profiles)):
+        # Accept the first non-saturated star
+        if profiles[i]['peak'] <= saturate_max:
+            brightest_unsaturated = profiles[i]
+            print("brightest unsaturated star: ", _make_json_ready_profile(brightest_unsaturated, fits_header))
+            #_plot_profile(brightest_unsaturated)
+            break
     
     return_body = {
         "median_star": _make_json_ready_profile(median_star, fits_header),
         "brightest_star": _make_json_ready_profile(brightest_star, fits_header),
+        "brightest_unsaturated": _make_json_ready_profile(brightest_unsaturated, fits_header),
         "num_good_stars": len(profiles),
     }
     return return_body
@@ -244,6 +259,7 @@ def _make_json_ready_profile(star_profile, fits_header):
         "gaussian_stddev": float(star_profile['fitted_model'].stddev.value),
         "gaussian_fwhm": float(star_profile['fitted_model'].fwhm),
         "radial_profile": np.round(star_profile['rad_profile'],4),
+        "hfd": star_profile['hfd'],
         #"star_cutout": star_profile['star_cutout'],
         "r2": star_profile['r2'],
     }
@@ -259,7 +275,8 @@ def _plot_profile(star_profile):
     ax[1].plot(x, star_profile['rad_profile'][:25])
     ax[1].plot(x, star_profile['fitted_model'](x))
 
-    print(f"fwhm: ",star_profile['fwhm'])        
+    print(f"fwhm: ",star_profile['fwhm']) 
+    print(f"hfd: ",star_profile['hfd'])
     print(f"r2: {star_profile['r2']}")
     print("")
     plt.show()        
@@ -275,6 +292,10 @@ def _get_star_profile(sep_object, data_sub):
 
     rad_profile = radial_profile(cutout.data, (25,25))
     #rad_profile /= max(rad_profile)
+       
+    # HFD calculation
+    rmax = 6.*obj['a']
+    hfd = get_hfd(data_sub, position[0], position[1], rmax, obj['flux'])
     
     # Fit a gaussian profile
     x = np.linspace(0,25,25)
@@ -297,14 +318,21 @@ def _get_star_profile(sep_object, data_sub):
     
     profile = {
         "fwhm": fitted_model.fwhm,
+        "hfd": hfd,
         "fitted_model": fitted_model,
         "r2": r2,
         "flux": obj['flux'],
+        "peak": obj['peak'],
         "sep_object": obj,
         "rad_profile": rad_profile,
         "star_cutout": cutout.data,
     }
     return profile
+          
+def get_hfd(data, x, y, rmax, flux, frac=0.5):
+    hfr, flags = sep.flux_radius(data, x, y, rmax, frac, flux)
+    hfd = 2*hfr
+    return hfd
     
 def _get_region(event):
     body = _get_body(event)
@@ -358,7 +386,6 @@ def _get_region(event):
         "y1": max(region_y0, region_y1),
     }
     return (data_region, relative_coordinates)
-
 
 def getStarProfiles(event, context):
 
