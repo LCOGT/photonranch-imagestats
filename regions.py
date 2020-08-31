@@ -84,9 +84,12 @@ def _get_fits(site, base_filename, EX01orEX13):
         print("Fits file not cached; downloading file.")
 
         # Get the url for the file
-        api_url = f"https://api.photonranch.org/api/fits{EX01orEX13}_url/{base_filename}"
+        api_url = f"https://api.photonranch.org/api/download"
+        body = json.dumps({
+            "object_name": f"{file_id}.fits.bz2"
+        })
         print(f"API url: {api_url}")
-        file_url = requests.get(api_url).text
+        file_url = requests.post(api_url, body).text
         print(f"File url: {file_url}")
 
         # Load the file from the url

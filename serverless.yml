@@ -8,6 +8,26 @@ provider:
   name: aws
   runtime: python3.7
 
+custom: 
+  pythonRequirements:
+    dockerizePip: non-linux
+    zip: true
+    slim: true
+
+
+  # This is the 'variable' for the customDomain.basePath value, based on the stage.
+  # Run as `sls deploy --stage <stage_name>`
+  stage:
+    prod: api
+    dev: dev
+
+  # Make sure to first run 'serverless create_domain'
+  customDomain:
+    domainName: 'analysis.photonranch.org'
+    basePath: ${self:custom.stage.${self:provider.stage}}
+    stage: ${self:provider.stage}
+    createRoute53Record: true
+
 
 functions:
   numpy:
@@ -57,12 +77,8 @@ functions:
 
 plugins: 
   - serverless-python-requirements
+  - serverless-domain-manager
 
-custom: 
-  pythonRequirements:
-    dockerizePip: non-linux
-    zip: true
-    slim: true
 
 package: 
   exclude:

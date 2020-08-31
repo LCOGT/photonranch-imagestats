@@ -10,5 +10,8 @@
   "license": "ISC",
   "dependencies": {
     "serverless-python-requirements": "^4.3.0"
+  },
+  "devDependencies": {
+    "serverless-domain-manager": "^3.3.1"
   }
 }
