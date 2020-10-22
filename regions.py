@@ -62,21 +62,21 @@ def _get_fits_header(event):
     body = _get_body(event)
     site = body.get('site')
     base_filename = body.get('base_filename')
-    EX01orEX13 = body.get('fitstype')
+    ex00_version = body.get('fitstype')
 
-    file_id = f"{base_filename}-{EX01orEX13}"
+    file_id = f"{base_filename}-{ex00_version}"
     if file_id not in fits_cache:
-        fitsFile = _get_fits(site, base_filename, EX01orEX13)
+        fitsFile = _get_fits(site, base_filename,ex00_version)
         return fitsFile[0].header
 
     return fits_cache[file_id][0].header
 
 
-def _get_fits(site, base_filename, EX01orEX13):
+def _get_fits(site, base_filename, ex00_version):
     """
-    EX01orEX13 should have a value in ["01", "13"]
+    ex00_version should have a value like "EX01" or "EX10".
     """
-    file_id = f"{base_filename}-{EX01orEX13}"
+    file_id = f"{base_filename}-{ex00_version}"
     print(f"Fits cache keys: {fits_cache.keys()}")
 
     # Only download the file if it's not cached already
@@ -226,21 +226,22 @@ def sepAnalysis(data, event, showPlots=False):
     print("median star: ", _make_json_ready_profile(median_star, fits_header))
     #_plot_profile(median_star)
     
+    return_body = {
+        "median_star": _make_json_ready_profile(median_star, fits_header),
+        "brightest_star": _make_json_ready_profile(brightest_star, fits_header),
+        "num_good_stars": len(profiles),
+    }
+
+    # Add the brightest unsaturated star, if it exists
     saturate_max = fits_header.get('saturate')
     for i in range(len(profiles)):
         # Accept the first non-saturated star
         if profiles[i]['peak'] <= saturate_max:
             brightest_unsaturated = profiles[i]
             print("brightest unsaturated star: ", _make_json_ready_profile(brightest_unsaturated, fits_header))
-            #_plot_profile(brightest_unsaturated)
+            return_body["brightest_unsaturated"] = _make_json_ready_profile(brightest_unsaturated, fits_header)
             break
-    
-    return_body = {
-        "median_star": _make_json_ready_profile(median_star, fits_header),
-        "brightest_star": _make_json_ready_profile(brightest_star, fits_header),
-        "brightest_unsaturated": _make_json_ready_profile(brightest_unsaturated, fits_header),
-        "num_good_stars": len(profiles),
-    }
+
     return return_body
     
 
@@ -269,13 +270,15 @@ def _make_json_ready_profile(star_profile, fits_header):
     return profile
     
 def _plot_profile(star_profile):
+
+    profile_size = len(star_profile["rad_profile"])
     
-    x = np.linspace(0,25,25)
+    x = np.linspace(0,profile_size, profile_size)
     
     fig, ax = plt.subplots(1,2)
     cutplot = ax[0].imshow(star_profile['star_cutout'], cmap="plasma")
     
-    ax[1].plot(x, star_profile['rad_profile'][:25])
+    ax[1].plot(x, star_profile['rad_profile'])
     ax[1].plot(x, star_profile['fitted_model'](x))
 
     print(f"fwhm: ",star_profile['fwhm']) 
@@ -293,7 +296,9 @@ def _get_star_profile(sep_object, data_sub):
     size = (50,50)
     cutout = Cutout2D(data_sub, position, size)
 
-    rad_profile = radial_profile(cutout.data, (25,25))
+    profile_size = min(25, min(data_sub.shape)) - 1
+
+    rad_profile = radial_profile(cutout.data, (profile_size, profile_size))
     #rad_profile /= max(rad_profile)
        
     # HFD calculation
@@ -301,16 +306,16 @@ def _get_star_profile(sep_object, data_sub):
     hfd = get_hfd(data_sub, position[0], position[1], rmax, obj['flux'])
     
     # Fit a gaussian profile
-    x = np.linspace(0,25,25)
+    x = np.linspace(0,profile_size, profile_size)
     fitter = fitting.LevMarLSQFitter()
     model = models.Gaussian1D() 
     # Should the gaussian amplitude have a fixed peak of 1, since our data is normalized?
     # model = models.Gaussian1D(amplitude=1, fixed={'amplitude': True}) 
-    fitted_model = fitter(model, x, rad_profile[:25])
+    fitted_model = fitter(model, x, rad_profile[:profile_size])
     
     # Coefficient of Determination to measure gaussian fit quality
     # see https://stackoverflow.com/questions/29003241/how-to-quantitatively-measure-goodness-of-fit-in-scipy
-    y = rad_profile[:25]
+    y = rad_profile[:profile_size]
     y_fit = fitted_model(x)
     # residual sum of squares
     ss_res = np.sum((y - y_fit) ** 2)
@@ -355,10 +360,13 @@ def _get_region(event):
     region_x1 = body.get("region_x1", 1)
     region_y0 = body.get("region_y0", 0)
     region_y1 = body.get("region_y1", 1)
-    x0 = int(data.shape[0] * region_x0)
-    x1 = int(data.shape[0] * region_x1)
-    y0 = int(data.shape[1] * region_y0)
-    y1 = int(data.shape[1] * region_y1)
+
+    # Note: data.shape returns (y, x) dimensions. 
+    # Previous bug from assuming (x, y).
+    x0 = int(data.shape[1] * region_x0)
+    x1 = int(data.shape[1] * region_x1)
+    y0 = int(data.shape[0] * region_y0)
+    y1 = int(data.shape[0] * region_y1)
 
     # Swap indices if the region was selected "backwards". 
     if x0 > x1:
@@ -380,6 +388,10 @@ def _get_region(event):
     print(f"y1: {y1}")
 
     data_region = data[y0:y1, x0:x1]
+    print(f"data post-slice: {data}")
+    print(f"data region post-slice: {data_region}")
+    print(f"data shape: {data.shape}")
+    print(f"data region shape: {data_region.shape}")
 
     # Useful for the client (displaying stuff), so include it in the return.
     relative_coordinates = {
@@ -424,17 +436,28 @@ def getRegionStats(event, context):
 if __name__=="__main__":
 
     site = "wmd"
-    base_filename = "wmd-kf01-20200218-00001139"
-    base_filename = "wmd-gf03-20191124-00001228"
-    #base_filename = "wmd-gf01-20190924-00008661"
-    #base_filename = "wmd-kf01-20200214-00000017"
-    #base_filename = "wmd-gf03-20191124-00001208"
+    base_filename = "saf-sq01-20201021-00004440"
+    base_filename = "saf-sq01-20201021-00004446"
+    base_filename = "saf-sq01-20201018-00004158"
 
     fake_event = {
         "body": json.dumps({
             "site": site,
             "base_filename": base_filename,
-            "fitstype": "01",
+            "fitstype": "EX10",
+            "region_x0": 0.4506709751218018,
+            "region_x1": 0.46845773698991117,
+            "region_y0": 0.41735266978838315,
+            "region_y1": 0.46036772376842844, 
+
+
+        })
+    }
+    fake_event1 = {
+        "body": json.dumps({
+            "site": site,
+            "base_filename": base_filename,
+            "fitstype": "EX10",
             
             "region_x0": 0.27168611582788393, 
             "region_x1": 0.5399038982622204,
@@ -447,18 +470,19 @@ if __name__=="__main__":
         "body": json.dumps({
             "site": site,
             "base_filename": base_filename,
-            "region_x1": 0.6891950162267663, 
-            "region_x0": 0.7327689898554343,
-            "region_y1": 0.6332750834033088,
-            "region_y0": 0.698636043846311,
-            "fitstype": "01"
+            "region_x0": 0.45031068951747367,
+            "region_x1": 0.4698842132536924,
+            "region_y0": 0.4172479525818603,
+            "region_y1": 0.4903525471091743, 
+            "fitstype": "EX01"
         })
     }
     print(json.loads(fake_event.get('body','')))
-
     getStarProfiles(fake_event, '')
 
     response = getRegionStats(fake_event, '')
     print(response)
+
+
     #response2 = getRegionStats(fake_event2, '')
     #print(response2)

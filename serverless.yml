@@ -44,17 +44,7 @@ functions:
       - http:
           path: regionstats
           method: post
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - X-Amz-Date
-              - Authorization
-              - X-Api-Key
-              - X-Amz-Security-Token
-              - X-Amz-User-Agent
-              - Access-Control-Allow-Origin
-              - Access-Control-Allow-Credentials
+          cors: true
   getStarProfiles:
     handler: regions.getStarProfiles
     timeout: 30
@@ -63,17 +53,7 @@ functions:
       - http:
           path: starprofiles
           method: post
-          cors:
-            origin: '*'
-            headers:
-              - Content-Type
-              - X-Amz-Date
-              - Authorization
-              - X-Api-Key
-              - X-Amz-Security-Token
-              - X-Amz-User-Agent
-              - Access-Control-Allow-Origin
-              - Access-Control-Allow-Credentials
+          cors: true
 
 plugins: 
   - serverless-python-requirements
