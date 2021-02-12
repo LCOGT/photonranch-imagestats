@@ -62,22 +62,19 @@ def _get_fits_header(event):
     body = _get_body(event)
     site = body.get('site')
     base_filename = body.get('base_filename')
-    ex00_version = body.get('fitstype')
+    data_type = body.get('data_type')
+    reduction_level = body.get('reduction_level')
 
-    file_id = f"{base_filename}-{ex00_version}"
+    file_id = f"{base_filename}-{data_type}{reduction_level}"
     if file_id not in fits_cache:
-        fitsFile = _get_fits(site, base_filename,ex00_version)
+        fitsFile = _get_fits(site, base_filename, data_type, reduction_level)
         return fitsFile[0].header
 
     return fits_cache[file_id][0].header
 
 
-def _get_fits(site, base_filename, ex00_version):
-    """
-    ex00_version should have a value like "EX01" or "EX10".
-    """
-    file_id = f"{base_filename}-{ex00_version}"
-    print(f"Fits cache keys: {fits_cache.keys()}")
+def _get_fits(site, base_filename, data_type, reduction_level):
+    file_id = f"{base_filename}-{data_type}{reduction_level}"
 
     # Only download the file if it's not cached already
     if file_id not in fits_cache:
@@ -88,9 +85,7 @@ def _get_fits(site, base_filename, ex00_version):
         body = json.dumps({
             "object_name": f"{file_id}.fits.bz2"
         })
-        print(f"API url: {api_url}")
         file_url = requests.post(api_url, body).text
-        print(f"File url: {file_url}")
 
         # Load the file from the url
         with fits.open(file_url) as f:
@@ -347,11 +342,12 @@ def _get_region(event):
 
     site = body.get("site")
     base_filename = body.get("base_filename")
-    EXversion = body.get("fitstype", "13") # we want the full sized fits file
+    data_type = body.get("data_type") 
+    reduction_level = body.get("reduction_level")
     print(f"site: {site}")
     print(f"base_filename: {base_filename}")
 
-    fitsfile = _get_fits(site, base_filename, EXversion)
+    fitsfile = _get_fits(site, base_filename, data_type, reduction_level)
     header = fitsfile[0].header
     data = fitsfile[0].data
 
@@ -444,7 +440,8 @@ if __name__=="__main__":
         "body": json.dumps({
             "site": site,
             "base_filename": base_filename,
-            "fitstype": "EX10",
+            "data_type": "EX",
+            "reduction_level": "10",
             "region_x0": 0.4506709751218018,
             "region_x1": 0.46845773698991117,
             "region_y0": 0.41735266978838315,
@@ -457,7 +454,8 @@ if __name__=="__main__":
         "body": json.dumps({
             "site": site,
             "base_filename": base_filename,
-            "fitstype": "EX10",
+            "data_type": "EX",
+            "reduction_level": "10",
             
             "region_x0": 0.27168611582788393, 
             "region_x1": 0.5399038982622204,
@@ -470,11 +468,12 @@ if __name__=="__main__":
         "body": json.dumps({
             "site": site,
             "base_filename": base_filename,
+            "data_type": "EX",
+            "reduction_level": "10",
             "region_x0": 0.45031068951747367,
             "region_x1": 0.4698842132536924,
             "region_y0": 0.4172479525818603,
             "region_y1": 0.4903525471091743, 
-            "fitstype": "EX01"
         })
     }
     print(json.loads(fake_event.get('body','')))
